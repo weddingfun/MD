@@ -27,7 +27,8 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 .save-status.saved { color:#2d8a3e; }
 .save-status.error { color:#c0392b; }
 
-.venue-wrap { max-width:1100px; margin:0 auto; background:#fff; border-radius:10px; padding:14px; box-shadow:0 2px 12px rgba(0,0,0,.08); overflow-x:auto; zoom:1.25; }
+.venue-wrap-outer { max-width:1450px; margin:0 auto; overflow-x:auto; }
+.venue-wrap { width:1100px; background:#fff; border-radius:10px; padding:14px; box-shadow:0 2px 12px rgba(0,0,0,.08); transform:scale(1.5); transform-origin:top left; margin-bottom:440px; }
 .screen-bar-abs { position:absolute; text-align:center; font-size:10px; background:#1a1a1a; color:#fff; border-radius:6px; padding:7px; letter-spacing:4px; }
 .center-zone { position:absolute; }
 .stage-panel { width:100%; height:75px; background:#E8E8E8; border:2px solid #1a1a1a; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#666; letter-spacing:2px; }
@@ -77,14 +78,15 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 .seat.veg.kid { background:linear-gradient(135deg,#D4EDCC 50%,#CFE3F5 50%); color:#1a1a1a; }
 .dish-select { font-size:8px; padding:1px 2px; border:1px solid #ddd; border-radius:3px; width:100%; background:#fff; }
 
-.annex-block { max-width:1100px; margin:10px auto 0; background:#fff; border-radius:10px; padding:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); display:none; zoom:1.25; }
+.annex-block-outer { max-width:1450px; margin:10px auto 0; overflow-x:auto; }
+.annex-block { width:1100px; background:#fff; border-radius:10px; padding:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); display:none; transform:scale(1.5); transform-origin:top left; }
 .annex-title { font-size:11px; font-weight:700; color:#1a1a1a; margin-bottom:8px; text-align:center; letter-spacing:1px; }
 .annex-tables { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
 
 @media print {
   body { background:#fff; padding:0; }
   .toolbar, .save-status, .cap-warn { display:none !important; }
-  .venue-wrap, .annex-block { box-shadow:none; zoom:0.62; }
+  .venue-wrap, .annex-block { box-shadow:none; transform:scale(0.62); transform-origin:top left; margin-bottom:0; }
 }
 @media (max-width:640px) {
   .venue-wrap { overflow-x:auto; }
@@ -119,7 +121,7 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 </div>
 <div class="save-status" id="saveStatus"></div>
 
-<div class="venue-wrap">
+<div class="venue-wrap-outer"><div class="venue-wrap">
   <div class="floor-plan" id="floorPlan">
     <svg class="room-boundary" viewBox="0 0 700 870" preserveAspectRatio="none">
       <circle cx="350" cy="380" r="352" fill="none" stroke="#ccc" stroke-width="2" stroke-dasharray="6,5"/>
@@ -165,12 +167,12 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
     <div class="aisle-path" style="left:405px; top:210px; width:35px; height:610px;"></div>
     <div class="arrow-note" style="left:390px; top:790px; width:65px;">↑<br>進場動線</div>
   </div>
-</div>
+</div></div>
 
-<div class="annex-block" id="annexBlock">
+<div class="annex-block-outer"><div class="annex-block" id="annexBlock">
   <div class="annex-title">海洋包廂加開（自助餐限定，最多加開20人）</div>
   <div class="annex-tables" id="annexTables"></div>
-</div>
+</div></div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
