@@ -95,6 +95,7 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 
 <h1>婚宴座位表</h1>
 <div class="sub">MD創作料理 台大明達館</div>
+<div class="sub" id="orderInfo" style="font-size:13px;font-weight:700;color:#1a1a1a;margin-top:2px;">載入中…</div>
 
 <div class="toolbar">
   <div class="toggle-group" id="layoutToggle">
@@ -492,13 +493,22 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // ── 載入既有資料 ──────────────────────
+  function updateOrderInfo() {
+    var el = document.getElementById('orderInfo');
+    if (!el) return;
+    var g = ORDER.groomName, b = ORDER.brideName, d = ORDER.weddingDate, s = ORDER.mealSession;
+    if (!g && !b && !d) { el.textContent = '（尚未帶入訂單資訊，請確認連結是否正確）'; el.style.color = '#c0392b'; return; }
+    el.textContent = (g||'—') + ' & ' + (b||'—') + '　｜　' + (d||'—') + '　' + (s||'');
+  }
+
   function loadData() {
-    if (!TOKEN) { seed(); setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); return; }
+    if (!TOKEN) { updateOrderInfo(); seed(); setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); return; }
     setStatus('saving', '載入中…');
     fetch(BASE_URL + '?token=' + encodeURIComponent(TOKEN) + '&action=getSeatData')
       .then(function(r){ return r.json(); })
       .then(function(data){
         ORDER = (data && data.order) || {};
+        updateOrderInfo();
         var seat = data && data.seat;
         if (seat && seat.tables && seat.tables.length) {
           tables = seat.tables;
