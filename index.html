@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function get(id) { return tables.filter(function(t){ return t.id===id; })[0] || annexTables.filter(function(t){ return t.id===id; })[0]; }
 
   function addTable(list, type, label, n, key) {
-    var t = { id: ++seq, type: type, label: label, key: key || label, seats: mkSeats(n) };
+    var t = { id: ++seq, type: type, label: label, key: key || label, autoLabel: true, seats: mkSeats(n) };
     list.push(t);
     return t;
   }
@@ -243,6 +243,16 @@ document.addEventListener('DOMContentLoaded', function () {
   function tableLabel(n) {
     if (TABLE_LABEL_MODE === 'letter') return String.fromCharCode(64 + n) + '桌'; // 1→A桌, 2→B桌...
     return n + '桌';
+  }
+
+  var TABLE_INDEX = { table1:1, table2:2, table3:3, table4:4, table5:5, table6:6, table7:7 };
+
+  function computeDisplayLabel(t) {
+    if (t.customLabel) return t.label;
+    var idx = TABLE_INDEX[t.key];
+    if (!idx) return t.label; // 非主場地桌（如海洋包廂）維持原標籤
+    if (state.format === 'buffet' && idx > 4) idx = idx - 1; // 4桌隱藏後，5/6/7桌依序遞補為4/5/6
+    return tableLabel(idx);
   }
 
   function seed() {
@@ -341,12 +351,12 @@ document.addEventListener('DOMContentLoaded', function () {
   function makeMid(t) {
     var div = document.createElement('div');
     div.className = 'table-mid';
-    div.textContent = t.label;
+    div.textContent = computeDisplayLabel(t);
     div.title = '點擊改桌名';
     div.onclick = function(e){
       e.stopPropagation();
-      var v = prompt('桌名', t.label);
-      if (v !== null && v.trim()) { t.label = v.trim(); render(); scheduleSave(); }
+      var v = prompt('桌名', computeDisplayLabel(t));
+      if (v !== null && v.trim()) { t.label = v.trim(); t.customLabel = true; render(); scheduleSave(); }
     };
     return div;
   }
@@ -374,12 +384,12 @@ document.addEventListener('DOMContentLoaded', function () {
     div.className = 'long-table-v';
     var colL = document.createElement('div'); colL.className = 'lv-col';
     var bar = document.createElement('div'); bar.className = 'table-bar-v';
-    var barSpan = document.createElement('span'); barSpan.textContent = t.label;
+    var barSpan = document.createElement('span'); barSpan.textContent = computeDisplayLabel(t);
     barSpan.title = '點擊改桌名';
     barSpan.onclick = function(e){
       e.stopPropagation();
-      var v = prompt('桌名', t.label);
-      if (v !== null && v.trim()) { t.label = v.trim(); render(); scheduleSave(); }
+      var v = prompt('桌名', computeDisplayLabel(t));
+      if (v !== null && v.trim()) { t.label = v.trim(); t.customLabel = true; render(); scheduleSave(); }
     };
     bar.appendChild(barSpan);
     var colR = document.createElement('div'); colR.className = 'lv-col';
@@ -520,6 +530,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var seat = data && data.seat;
         if (seat && seat.tables && seat.tables.length) {
           tables = seat.tables;
+          tables.forEach(function(t, i){ if (!t.key && i < 7) t.key = 'table' + (i+1); });
           annexTables = seat.annex || [];
           state.layout = seat.layout || 'stage';
           state.format = seat.format || 'set';
