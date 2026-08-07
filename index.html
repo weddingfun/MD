@@ -221,6 +221,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── 資料模型 ──────────────────────────────────
   var state = { layout: 'stage', format: 'set' };
   var ORDER = {};
+  var TABLE_LABEL_MODE = 'number'; // 'number' 或 'letter'，依確認單「桌牌」選擇決定
   var seq = 0;
   var tables = [];       // 主場地固定桌
   var annexTables = [];  // 海洋包廂加開桌
@@ -233,17 +234,22 @@ document.addEventListener('DOMContentLoaded', function () {
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function get(id) { return tables.filter(function(t){ return t.id===id; })[0] || annexTables.filter(function(t){ return t.id===id; })[0]; }
 
-  function addTable(list, type, label, n) {
-    var t = { id: ++seq, type: type, label: label, seats: mkSeats(n) };
+  function addTable(list, type, label, n, key) {
+    var t = { id: ++seq, type: type, label: label, key: key || label, seats: mkSeats(n) };
     list.push(t);
     return t;
   }
 
+  function tableLabel(n) {
+    if (TABLE_LABEL_MODE === 'letter') return String.fromCharCode(64 + n) + '桌'; // 1→A桌, 2→B桌...
+    return n + '桌';
+  }
+
   function seed() {
-    for (var i=1;i<=4;i++) addTable(tables, 'round5', i+'桌', 5);
-    addTable(tables, 'long16', '5桌', 16);
-    addTable(tables, 'long20', '6桌', 20);
-    addTable(tables, 'long20', '7桌', 20);
+    for (var i=1;i<=4;i++) addTable(tables, 'round5', tableLabel(i), 5, 'table'+i);
+    addTable(tables, 'long16', tableLabel(5), 16, 'table5');
+    addTable(tables, 'long20', tableLabel(6), 20, 'table6');
+    addTable(tables, 'long20', tableLabel(7), 20, 'table7');
     render();
   }
 
@@ -362,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function makeLongTableVertical(t) {
     var n = t.seats.length; // 16 or 20
-    if (t.label === '7桌' && state.format === 'buffet') n = 18; // 自助餐格式：備餐台前2位不開放
+    if (t.key === 'table7' && state.format === 'buffet') n = 18; // 自助餐格式：備餐台前2位不開放
     var half = n/2;
     var div = document.createElement('div');
     div.className = 'long-table-v';
@@ -430,7 +436,7 @@ document.addEventListener('DOMContentLoaded', function () {
     longSlots.forEach(function(id){ document.getElementById(id).innerHTML = ''; });
     tables.forEach(function(t){
       if (t.type === 'round5') {
-        if (t.label === '4桌' && state.format === 'buffet') { return; }
+        if (t.key === 'table4' && state.format === 'buffet') { return; }
         var slot = document.getElementById(roundSlots[ri++]);
         if (slot) slot.appendChild(makeRoundTable(t));
       } else {
@@ -460,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function updateStat() {
-    var main = countFilled(tables.filter(function(t){ return !(t.label === '4桌' && state.format === 'buffet'); }));
+    var main = countFilled(tables.filter(function(t){ return !(t.key === 'table4' && state.format === 'buffet'); }));
     if (state.layout === 'maintable' && state.mainSeats) {
       state.mainSeats.forEach(function(s){ if (s.name.trim()) main++; });
     }
@@ -508,6 +514,8 @@ document.addEventListener('DOMContentLoaded', function () {
       .then(function(r){ return r.json(); })
       .then(function(data){
         ORDER = (data && data.order) || {};
+        var formData = (data && data.form) || {};
+        TABLE_LABEL_MODE = (formData.tableCard === '字母(A-J)') ? 'letter' : 'number';
         updateOrderInfo();
         var seat = data && data.seat;
         if (seat && seat.tables && seat.tables.length) {
