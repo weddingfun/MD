@@ -219,6 +219,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ── 資料模型 ──────────────────────────────────
   var state = { layout: 'stage', format: 'set' };
+  var ORDER = {};
   var seq = 0;
   var tables = [];       // 主場地固定桌
   var annexTables = [];  // 海洋包廂加開桌
@@ -285,7 +286,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (state.format === 'set') {
       var sel = document.createElement('select');
       sel.className = 'dish-select';
-      sel.innerHTML = '<option value="">主餐</option><option value="A">主餐A</option><option value="B">主餐B</option>';
+      var nameA = (ORDER.mainDishA_short && ORDER.mainDishA_short.trim()) || '主餐A';
+      var nameB = (ORDER.mainDishB_short && ORDER.mainDishB_short.trim()) || '主餐B';
+      sel.innerHTML = '<option value="">主餐</option><option value="A">' + nameA + '</option><option value="B">' + nameB + '</option>';
       sel.value = s.dish || '';
       sel.onchange = function(){ s.dish = sel.value; scheduleSave(); };
       wrap.appendChild(sel);
@@ -495,6 +498,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(BASE_URL + '?token=' + encodeURIComponent(TOKEN) + '&action=getSeatData')
       .then(function(r){ return r.json(); })
       .then(function(data){
+        ORDER = (data && data.order) || {};
         var seat = data && data.seat;
         if (seat && seat.tables && seat.tables.length) {
           tables = seat.tables;
