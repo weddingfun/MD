@@ -139,8 +139,8 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
     <!-- 四根柱子：前後左右對稱（前後柱同一垂直線） -->
     <div class="pillar-box" style="left:195px; top:145px;"></div>
     <div class="pillar-box" style="left:545px; top:145px;"></div>
-    <div class="pillar-box" style="left:195px; top:520px;"></div>
-    <div class="pillar-box" style="left:545px; top:575px;"></div>
+    <div class="pillar-box" id="pillarBackLeft" style="left:195px; top:520px;"></div>
+    <div class="pillar-box" id="pillarBackRight" style="left:545px; top:575px;"></div>
 
     <div class="round-slot" id="rSlot0" style="left:55px; top:170px;"></div>
     <div class="round-slot" id="rSlot1" style="left:15px; top:320px;"></div>
@@ -462,6 +462,50 @@ document.addEventListener('DOMContentLoaded', function () {
     updateServiceLabels();
     renderAnnex();
     updateStat();
+    layoutAdjust();
+  }
+
+  // 依實際渲染出來的桌子高度，動態往下排後排柱子、4桌、走道位置，避免手動座標跟內容高度對不上而互相蓋住
+  function layoutAdjust() {
+    var mainIds = ['lSlot0','lSlot1','lSlot2','rSlot0','rSlot1','rSlot2'];
+    var maxBottom = 0;
+    mainIds.forEach(function(id){
+      var el = document.getElementById(id);
+      if (el && el.offsetHeight > 0) {
+        var bottom = el.offsetTop + el.offsetHeight;
+        if (bottom > maxBottom) maxBottom = bottom;
+      }
+    });
+    var gap = 20;
+    var pillarTop = maxBottom + gap;
+    var pillarBL = document.getElementById('pillarBackLeft');
+    var pillarBR = document.getElementById('pillarBackRight');
+    if (pillarBL) pillarBL.style.top = pillarTop + 'px';
+    if (pillarBR) pillarBR.style.top = pillarTop + 'px';
+
+    var table4Top = pillarTop + 25;
+    var rSlot3 = document.getElementById('rSlot3');
+    if (rSlot3) { rSlot3.style.top = table4Top + 'px'; rSlot3.style.left = '100px'; }
+
+    var table4Bottom = table4Top + 130; // 130 = 圓桌wrapper高度
+    var aisleTop = Math.max(210, maxBottom + gap);
+    var floorBottom = Math.max(table4Bottom, pillarTop + 50) + gap + 100; // 進場動線走道最少再留100px
+
+    var aisle = document.querySelector('.aisle-path');
+    var arrow = document.querySelector('.arrow-note');
+    if (aisle) { aisle.style.top = aisleTop + 'px'; aisle.style.height = (floorBottom - aisleTop) + 'px'; }
+    if (arrow) { arrow.style.top = (floorBottom - 40) + 'px'; }
+
+    var floorPlan = document.getElementById('floorPlan');
+    if (floorPlan) {
+      var neededHeight = floorBottom + 40;
+      floorPlan.style.height = Math.max(900, neededHeight) + 'px';
+      var venueWrap = document.querySelector('.venue-wrap');
+      if (venueWrap) {
+        var extra = Math.max(0, neededHeight - 900);
+        venueWrap.style.marginBottom = (232 + extra) + 'px';
+      }
+    }
   }
 
   function renderAnnex() {
