@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>明達館 座位表</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,"PingFang TC","Helvetica Neue",sans-serif; background:#F0EDE8; color:#1a1a1a; padding:10px; font-size:12px; }
+h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
+.sub { text-align:center; font-size:10px; color:#999; letter-spacing:1px; margin-bottom:8px; }
+.toolbar { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-bottom:8px; }
+.btn { background:#1a1a1a; color:#fff; border:none; padding:7px 12px; border-radius:5px; font-size:11px; cursor:pointer; }
+.btn.ghost { background:#fff; color:#1a1a1a; border:1px solid #bbb; }
+.toggle-group { display:flex; border:1px solid #1a1a1a; border-radius:6px; overflow:hidden; }
+.toggle-group button { border:none; background:#fff; color:#1a1a1a; padding:7px 12px; font-size:11px; cursor:pointer; }
+.toggle-group button.active { background:#1a1a1a; color:#fff; }
+.toggle-group button:not(:last-child) { border-right:1px solid #1a1a1a; }
+.stat { text-align:center; font-size:11px; color:#666; margin-bottom:4px; }
+.stat b { color:#1a1a1a; }
+.cap-warn { text-align:center; font-size:11px; color:#b8341a; font-weight:700; margin-bottom:6px; display:none; }
+.legend { display:flex; gap:14px; justify-content:center; margin-bottom:8px; flex-wrap:wrap; }
+.leg { display:flex; align-items:center; gap:4px; font-size:10px; color:#555; }
+.leg-box { width:12px; height:12px; border-radius:3px; border:1px solid #ccc; }
+.save-status { text-align:center; font-size:10px; color:#999; margin-bottom:6px; height:14px; }
+.save-status.saving { color:#c8860a; }
+.save-status.saved { color:#2d8a3e; }
+.save-status.error { color:#c0392b; }
+
+.venue-wrap { max-width:1100px; margin:0 auto; background:#fff; border-radius:10px; padding:14px; box-shadow:0 2px 12px rgba(0,0,0,.08); overflow-x:auto; }
+.screen-bar-abs { position:absolute; text-align:center; font-size:10px; background:#1a1a1a; color:#fff; border-radius:6px; padding:7px; letter-spacing:4px; }
+.center-zone { position:absolute; }
+.stage-panel { width:100%; height:75px; background:#E8E8E8; border:2px solid #1a1a1a; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#666; letter-spacing:2px; }
+.maintable-box { border:2px solid #B8944A; background:#FBF5E6; border-radius:8px; padding:8px 14px; display:flex; align-items:center; gap:8px; justify-content:center; }
+.maintable-box .m-label { font-size:10px; font-weight:700; color:#9a7a30; letter-spacing:2px; }
+
+.floor-plan { position:relative; width:700px; height:870px; margin:0 auto; background:#FCFBF8; overflow:hidden; }
+.room-boundary { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+.deco-abs { position:absolute; font-size:9px; text-align:center; color:#888; border:1.5px dashed #ccc; border-radius:6px; padding:5px 4px; letter-spacing:1px; background:#fff; }
+.pillar-box { position:absolute; width:50px; height:50px; background:#8a8a8a; border-radius:2px; opacity:.8; }
+.counter-box { position:absolute; width:70px; background:linear-gradient(135deg,#E8C9A0,#D8AE78); border:1px solid #b8905a; border-radius:20px 100px 100px 20px; display:flex; align-items:center; justify-content:center; }
+.counter-box span { writing-mode:vertical-rl; font-size:10px; color:#5a3d1a; font-weight:700; letter-spacing:2px; }
+.counter-box.horizontal { border-radius:16px; }
+.counter-box.horizontal span { writing-mode:horizontal-tb; letter-spacing:1px; }
+.arrow-note { position:absolute; font-size:9px; color:#c0392b; font-weight:700; text-align:center; z-index:2; }
+.aisle-path { position:absolute; border-left:1px dashed #ddd; border-right:1px dashed #ddd; }
+.round-slot { position:absolute; }
+.long-slot { position:absolute; }
+
+/* 圓桌 5位：獨立wrapper容納座位環繞在桌子外圍 */
+.round-wrap { position:relative; width:130px; height:130px; margin:0 auto; }
+.round-table { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:44px; height:44px; border-radius:50%; border:1.5px solid #888; background:#FAFAFA; }
+.round-table .table-mid { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:9px; font-weight:700; color:#666; cursor:pointer; white-space:nowrap; background:#fff; padding:1px 3px; border-radius:8px; border:1px solid #ccc; }
+.round-wrap .r-seat { position:absolute; width:44px; transform:translate(-50%,-50%); }
+.round-wrap .r-seat.p0 { left:65px; top:27px; }
+.round-wrap .r-seat.p1 { left:101px; top:54px; }
+.round-wrap .r-seat.p2 { left:87px; top:96px; }
+.round-wrap .r-seat.p3 { left:43px;  top:96px; }
+.round-wrap .r-seat.p4 { left:29px;  top:54px; }
+
+/* 長桌 16/20位（直式）：座位分左右兩欄夾住中間直向桌面 */
+.long-table-v { display:flex; flex-direction:row; border:1.5px solid #5A8A52; border-radius:8px; overflow:hidden; background:#F2FAF0; height:100%; }
+.long-table-v .lv-col { display:flex; flex-direction:column; padding:6px 3px; flex:1; justify-content:space-between; }
+.long-table-v .table-bar-v { width:16px; background:#5A8A52; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.long-table-v .table-bar-v span { writing-mode:vertical-rl; font-size:9px; color:#fff; letter-spacing:2px; font-weight:700; cursor:pointer; }
+.long-table-v .lv-seat { width:100%; }
+.long-table-v .lv-seat .seat { font-size:8px; padding:2px 2px; }
+.long-table-v .lv-seat .dish-select { font-size:7px; }
+
+.seat-cell { display:flex; flex-direction:column; gap:2px; }
+.seat { font-size:9px; background:#F0F0F0; border-radius:3px; padding:3px 4px; cursor:text; white-space:nowrap; overflow:hidden; line-height:1.4; border:1px solid transparent; outline:none; width:100%; box-sizing:border-box; font-family:inherit; text-align:center; }
+.seat:hover { background:#E8E4DC; }
+.seat.empty-s { color:#bbb; }
+.seat.filled { background:#EDEDED; color:#1a1a1a; }
+.seat.veg { background:#D4EDCC; color:#2d6a21; }
+.seat.kid { background:#CFE3F5; color:#1a4a7a; }
+.seat.veg.kid { background:linear-gradient(135deg,#D4EDCC 50%,#CFE3F5 50%); color:#1a1a1a; }
+.dish-select { font-size:8px; padding:1px 2px; border:1px solid #ddd; border-radius:3px; width:100%; background:#fff; }
+
+.annex-block { max-width:1100px; margin:10px auto 0; background:#fff; border-radius:10px; padding:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); display:none; }
+.annex-title { font-size:11px; font-weight:700; color:#1a1a1a; margin-bottom:8px; text-align:center; letter-spacing:1px; }
+.annex-tables { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+@media print {
+  body { background:#fff; padding:0; }
+  .toolbar, .save-status, .cap-warn { display:none !important; }
+  .venue-wrap, .annex-block { box-shadow:none; zoom:0.62; }
+}
+@media (max-width:640px) {
+  .venue-wrap { overflow-x:auto; }
+}
+</style>
+</head>
+<body>
+
+<h1>婚宴座位表</h1>
+<div class="sub">MD創作料理 台大明達館</div>
+
+<div class="toolbar">
+  <div class="toggle-group" id="layoutToggle">
+    <button data-v="stage">舞台版</button>
+    <button data-v="maintable">雙人主桌版</button>
+  </div>
+  <div class="toggle-group" id="formatToggle">
+    <button data-v="set">套餐</button>
+    <button data-v="buffet">自助餐</button>
+  </div>
+  <button class="btn ghost" onclick="window.print()">🖨️ 列印</button>
+</div>
+
+<div class="stat">已安排 <b id="seatedCount">0</b> / <span id="capLabel">75</span> 人（含加開包廂：<b id="annexCount">0</b>）</div>
+<div class="cap-warn" id="capWarn">⚠️ 已超過人數上限，請確認是否需調整方案</div>
+
+<div class="legend">
+  <div class="leg"><span class="leg-box" style="background:#D4EDCC"></span>素食</div>
+  <div class="leg"><span class="leg-box" style="background:#CFE3F5"></span>兒童椅</div>
+  <div class="leg"><span class="leg-box" style="background:#EDEDED"></span>已填寫</div>
+</div>
+<div class="save-status" id="saveStatus"></div>
+
+<div class="venue-wrap">
+  <div class="floor-plan" id="floorPlan">
+    <svg class="room-boundary" viewBox="0 0 700 870" preserveAspectRatio="none">
+      <circle cx="350" cy="380" r="352" fill="none" stroke="#ccc" stroke-width="2" stroke-dasharray="6,5"/>
+    </svg>
+
+    <div class="screen-bar-abs" style="left:180px; top:20px; width:340px;">200 吋 投影幕</div>
+    <div class="center-zone" id="centerZone" style="left:230px; top:50px; width:240px;"></div>
+
+    <div class="deco-abs" style="left:64px; top:138px; width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center;">🎹<br>鋼琴</div>
+    <div class="deco-abs" style="left:567px; top:139px; width:64px; background:#E8F2E4; border-color:#5A8A52; color:#3d6636;">音控區</div>
+
+    <!-- 四根柱子：前後左右對稱（前後柱同一垂直線） -->
+    <div class="pillar-box" style="left:195px; top:145px;"></div>
+    <div class="pillar-box" style="left:545px; top:145px;"></div>
+    <div class="pillar-box" style="left:195px; top:520px;"></div>
+    <div class="pillar-box" style="left:545px; top:575px;"></div>
+
+    <div class="round-slot" id="rSlot0" style="left:55px; top:170px;"></div>
+    <div class="round-slot" id="rSlot1" style="left:15px; top:320px;"></div>
+    <div class="round-slot" id="rSlot2" style="left:55px; top:460px;"></div>
+    <div class="round-slot" id="rSlot3" style="left:140px; top:555px;"></div>
+
+    <div class="long-slot" id="lSlot0" style="left:185px; top:205px; width:100px; height:310px;"></div>
+    <div class="long-slot" id="lSlot1" style="left:300px; top:205px; width:100px; height:388px;"></div>
+    <div class="long-slot" id="lSlot2" style="left:440px; top:205px; width:100px; height:388px;"></div>
+
+    <svg class="counter-arc" viewBox="0 0 700 870" style="position:absolute; left:0; top:0; width:700px; height:870px; pointer-events:none;">
+      <defs>
+        <linearGradient id="counterGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#E8C9A0"/>
+          <stop offset="100%" stop-color="#D8AE78"/>
+        </linearGradient>
+      </defs>
+      <path d="M 609 192 A 320 320 0 0 1 615 559 L 578 534 A 275 275 0 0 0 572 218 Z" fill="url(#counterGrad)" stroke="#b8905a" stroke-width="1.5"/>
+    </svg>
+    <div class="counter-label" id="counterBox" style="position:absolute; left:565px; top:355px; width:50px; text-align:center;">
+      <span style="writing-mode:vertical-rl; font-size:10px; color:#5a3d1a; font-weight:700; letter-spacing:2px;">備 餐 檯 ／ 迎 賓 飲 料</span>
+    </div>
+    <div class="counter-box horizontal" id="welcomeDrinkBox" style="left:300px; top:620px; width:100px; height:80px; display:none;">
+      <span>迎賓飲料</span>
+    </div>
+
+    <div class="aisle-path" style="left:405px; top:210px; width:35px; height:610px;"></div>
+    <div class="arrow-note" style="left:390px; top:790px; width:65px;">↑<br>進場動線</div>
+  </div>
+</div>
+
+<div class="annex-block" id="annexBlock">
+  <div class="annex-title">海洋包廂加開（自助餐限定，最多加開20人）</div>
+  <div class="annex-tables" id="annexTables"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  // ── GAS 串接（沿用共用後端，venue無關）──────────────────
+  var GAS_MODE = true;
+  var BASE_URL = 'https://script.google.com/macros/s/AKfycbwV3pXKiwOBCbvv_W0ysv1_mjGsAnK4VqKQI5-jAbjDWGgEaBpVJufiszaVhYsc73Lg/exec';
+  var TOKEN = (function(){
+    var m = location.search.match(/[?&]token=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  })();
+
+  function setStatus(cls, msg) {
+    var el = document.getElementById('saveStatus');
+    el.className = 'save-status ' + cls; el.textContent = msg;
+  }
+  function timeStr() {
+    var d=new Date(); return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');
+  }
+
+  var saveTimer = null;
+  function scheduleSave() {
+    if (!GAS_MODE || !TOKEN) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(doSave, 1200);
+  }
+  function doSave() {
+    if (!TOKEN) return;
+    setStatus('saving', '儲存中…');
+    var payload = { layout: state.layout, format: state.format, tables: tables, annex: annexTables };
+    var seatStr = JSON.stringify(payload);
+    var getUrl = BASE_URL + '?action=saveSeatData&token=' + encodeURIComponent(TOKEN) + '&seat=' + encodeURIComponent(seatStr);
+    if (getUrl.length <= 2000) {
+      fetch(getUrl)
+        .then(function(){ setStatus('saved', '✓ 已儲存 ' + timeStr()); })
+        .catch(function(e){ setStatus('error', '儲存失敗：' + e.message); });
+    } else {
+      fetch(BASE_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ token: TOKEN, action: 'saveSeatData', seat: payload })
+      })
+      .then(function(){ setStatus('saved', '✓ 已儲存 ' + timeStr()); })
+      .catch(function(e){ setStatus('error', '儲存失敗：' + e.message); });
+    }
+  }
+
+  // ── 資料模型 ──────────────────────────────────
+  var state = { layout: 'stage', format: 'set' };
+  var seq = 0;
+  var tables = [];       // 主場地固定桌
+  var annexTables = [];  // 海洋包廂加開桌
+
+  function mkSeats(n) {
+    var a = [];
+    for (var i = 0; i < n; i++) a.push({ name: '', dish: '', veg: false, kid: false });
+    return a;
+  }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function get(id) { return tables.filter(function(t){ return t.id===id; })[0] || annexTables.filter(function(t){ return t.id===id; })[0]; }
+
+  function addTable(list, type, label, n) {
+    var t = { id: ++seq, type: type, label: label, seats: mkSeats(n) };
+    list.push(t);
+    return t;
+  }
+
+  function seed() {
+    for (var i=1;i<=4;i++) addTable(tables, 'round5', i+'桌', 5);
+    addTable(tables, 'long16', '5桌', 16);
+    addTable(tables, 'long20', '6桌', 20);
+    addTable(tables, 'long20', '7桌', 20);
+    render();
+  }
+
+  function seedAnnex() {
+    annexTables = [];
+    for (var i=1;i<=4;i++) addTable(annexTables, 'round5', '包廂'+i+'桌', 5);
+  }
+
+  // ── IME安全輸入 + 標籤選單 ──────────────────────
+  function makeSeatCell(t, idx) {
+    var s = t.seats[idx];
+    var wrap = document.createElement('div');
+    wrap.className = 'seat-cell';
+
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = seatClass(s);
+    inp.value = s.name.trim();
+    inp.placeholder = '座' + (idx+1);
+    var composing = false;
+    inp.addEventListener('compositionstart', function(){ composing = true; });
+    inp.addEventListener('compositionend', function(){ composing = false; });
+    inp.onblur = function(){
+      if (composing) return;
+      s.name = inp.value.trim();
+      inp.value = s.name;
+      inp.className = seatClass(s);
+      updateStat(); scheduleSave();
+    };
+    inp.onkeydown = function(e){ if(e.key==='Enter' && !composing) inp.blur(); };
+    inp.oncontextmenu = function(e){ e.preventDefault(); e.stopPropagation(); showTagMenu(e, s, inp); };
+    var pressTimer = null, touchX=0, touchY=0;
+    inp.addEventListener('touchstart', function(e){
+      touchX = e.touches[0].clientX; touchY = e.touches[0].clientY;
+      pressTimer = setTimeout(function(){ showTagMenu({ clientX: touchX, clientY: touchY }, s, inp); }, 600);
+    }, { passive:true });
+    inp.addEventListener('touchend', function(){ clearTimeout(pressTimer); }, { passive:true });
+    inp.addEventListener('touchmove', function(){ clearTimeout(pressTimer); }, { passive:true });
+    wrap.appendChild(inp);
+
+    if (state.format === 'set') {
+      var sel = document.createElement('select');
+      sel.className = 'dish-select';
+      sel.innerHTML = '<option value="">主餐</option><option value="A">主餐A</option><option value="B">主餐B</option>';
+      sel.value = s.dish || '';
+      sel.onchange = function(){ s.dish = sel.value; scheduleSave(); };
+      wrap.appendChild(sel);
+    }
+    return wrap;
+  }
+
+  function seatClass(s) {
+    return 'seat' + (!s.name.trim() ? ' empty-s' : (s.veg && s.kid) ? ' veg kid' : s.veg ? ' veg' : s.kid ? ' kid' : ' filled');
+  }
+
+  function refreshSeat(inp, s) {
+    inp.value = s.name;
+    inp.className = seatClass(s);
+    updateStat(); scheduleSave();
+  }
+
+  function showTagMenu(e, s, seatInp) {
+    var old = document.getElementById('tagMenu'); if(old) old.remove();
+    var menu = document.createElement('div'); menu.id='tagMenu';
+    menu.style.cssText='position:fixed;z-index:200;background:#fff;border:1px solid #ddd;border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:4px;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:12px;min-width:110px;';
+    menu.style.left = Math.min(e.clientX, window.innerWidth-130)+'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight-110)+'px';
+    function mkItem(label, active, toggle) {
+      var b=document.createElement('button');
+      b.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 8px;cursor:pointer;text-align:left;background:'+(active?'#D4EDCC':'#fff')+';color:'+(active?'#2d6a21':'#333')+';';
+      b.textContent=(active?'✓ ':'')+label;
+      b.onclick=function(){ toggle(); menu.remove(); refreshSeat(seatInp,s); };
+      return b;
+    }
+    menu.appendChild(mkItem('素食', s.veg, function(){ s.veg=!s.veg; }));
+    menu.appendChild(mkItem('兒童椅', s.kid, function(){ s.kid=!s.kid; }));
+    var sep=document.createElement('hr'); sep.style.cssText='border:none;border-top:1px solid #eee;margin:2px 0;'; menu.appendChild(sep);
+    var clr=document.createElement('button');
+    clr.style.cssText='border:1px solid #ddd;border-radius:5px;padding:5px 8px;cursor:pointer;text-align:left;background:#fff;color:#c0392b;';
+    clr.textContent='清除';
+    clr.onclick=function(){ s.name=''; s.dish=''; s.veg=false; s.kid=false; refreshSeat(seatInp,s); menu.remove(); };
+    menu.appendChild(clr);
+    document.body.appendChild(menu);
+    setTimeout(function(){ document.addEventListener('click', function h(){ menu.remove(); document.removeEventListener('click',h); }); },10);
+  }
+
+  function makeMid(t) {
+    var div = document.createElement('div');
+    div.className = 'table-mid';
+    div.textContent = t.label;
+    div.title = '點擊改桌名';
+    div.onclick = function(e){
+      e.stopPropagation();
+      var v = prompt('桌名', t.label);
+      if (v !== null && v.trim()) { t.label = v.trim(); render(); scheduleSave(); }
+    };
+    return div;
+  }
+
+  function makeRoundTable(t) {
+    var wrap = document.createElement('div');
+    wrap.className = 'round-wrap';
+    var circle = document.createElement('div');
+    circle.className = 'round-table';
+    circle.appendChild(makeMid(t));
+    wrap.appendChild(circle);
+    for (var i=0;i<5;i++) {
+      var cell = makeSeatCell(t, i);
+      cell.classList.add('r-seat', 'p'+i);
+      wrap.appendChild(cell);
+    }
+    return wrap;
+  }
+
+  function makeLongTableVertical(t) {
+    var n = t.seats.length; // 16 or 20
+    if (t.label === '7桌' && state.format === 'buffet') n = 18; // 自助餐格式：備餐台前2位不開放
+    var half = n/2;
+    var div = document.createElement('div');
+    div.className = 'long-table-v';
+    var colL = document.createElement('div'); colL.className = 'lv-col';
+    var bar = document.createElement('div'); bar.className = 'table-bar-v';
+    var barSpan = document.createElement('span'); barSpan.textContent = t.label;
+    barSpan.title = '點擊改桌名';
+    barSpan.onclick = function(e){
+      e.stopPropagation();
+      var v = prompt('桌名', t.label);
+      if (v !== null && v.trim()) { t.label = v.trim(); render(); scheduleSave(); }
+    };
+    bar.appendChild(barSpan);
+    var colR = document.createElement('div'); colR.className = 'lv-col';
+    for (var i=0;i<half;i++) {
+      var c = document.createElement('div'); c.className='lv-seat'; c.appendChild(makeSeatCell(t, i)); colL.appendChild(c);
+    }
+    for (var i=half;i<n;i++) {
+      var c2 = document.createElement('div'); c2.className='lv-seat'; c2.appendChild(makeSeatCell(t, i)); colR.appendChild(c2);
+    }
+    div.appendChild(colL);
+    div.appendChild(bar);
+    div.appendChild(colR);
+    return div;
+  }
+
+  function renderCenterZone() {
+    var zone = document.getElementById('centerZone');
+    zone.innerHTML = '';
+    if (state.layout === 'stage') {
+      var p = document.createElement('div'); p.className='stage-panel'; p.textContent='舞台（3片併接）';
+      zone.appendChild(p);
+    } else {
+      var mt = document.createElement('div'); mt.className='maintable-box';
+      var lbl = document.createElement('div'); lbl.className='m-label'; lbl.textContent='雙人主桌';
+      mt.appendChild(lbl);
+      if (!state.mainSeats) state.mainSeats = mkSeats(2);
+      var fakeT = { id:-1, label:'主桌', seats: state.mainSeats };
+      for (var i=0;i<2;i++) mt.appendChild(makeSeatCell(fakeT, i));
+      zone.appendChild(mt);
+    }
+  }
+
+  function updateServiceLabels() {
+    var counterSpan = document.querySelector('#counterBox span');
+    var wdBox = document.getElementById('welcomeDrinkBox');
+    if (!counterSpan || !wdBox) return;
+    if (state.format === 'buffet') {
+      counterSpan.textContent = '備 餐 檯';
+      wdBox.style.display = 'flex';
+    } else {
+      counterSpan.textContent = '備 餐 檯 ／ 迎 賓 飲 料';
+      wdBox.style.display = 'none';
+    }
+  }
+
+  function render() {
+    renderCenterZone();
+    var lSlot2El = document.getElementById('lSlot2');
+    if (lSlot2El) lSlot2El.style.height = (state.format === 'buffet' ? 349 : 388) + 'px';
+    var roundSlots = ['rSlot0','rSlot1','rSlot2','rSlot3'];
+    var longSlots = ['lSlot0','lSlot1','lSlot2'];
+    var ri = 0, li = 0;
+    roundSlots.forEach(function(id){ document.getElementById(id).innerHTML = ''; });
+    longSlots.forEach(function(id){ document.getElementById(id).innerHTML = ''; });
+    tables.forEach(function(t){
+      if (t.type === 'round5') {
+        if (t.label === '4桌' && state.format === 'buffet') { return; }
+        var slot = document.getElementById(roundSlots[ri++]);
+        if (slot) slot.appendChild(makeRoundTable(t));
+      } else {
+        var slot2 = document.getElementById(longSlots[li++]);
+        if (slot2) slot2.appendChild(makeLongTableVertical(t));
+      }
+    });
+    updateServiceLabels();
+    renderAnnex();
+    updateStat();
+  }
+
+  function renderAnnex() {
+    var block = document.getElementById('annexBlock');
+    var wrap = document.getElementById('annexTables');
+    if (state.format !== 'buffet') { block.style.display = 'none'; return; }
+    block.style.display = 'block';
+    wrap.innerHTML = '';
+    if (annexTables.length === 0) seedAnnex();
+    annexTables.forEach(function(t){ wrap.appendChild(makeRoundTable(t)); });
+  }
+
+  function countFilled(list) {
+    var c = 0;
+    list.forEach(function(t){ t.seats.forEach(function(s){ if (s.name.trim()) c++; }); });
+    return c;
+  }
+
+  function updateStat() {
+    var main = countFilled(tables.filter(function(t){ return !(t.label === '4桌' && state.format === 'buffet'); }));
+    if (state.layout === 'maintable' && state.mainSeats) {
+      state.mainSeats.forEach(function(s){ if (s.name.trim()) main++; });
+    }
+    var annex = state.format === 'buffet' ? countFilled(annexTables) : 0;
+    document.getElementById('seatedCount').textContent = main;
+    document.getElementById('annexCount').textContent = annex;
+    var cap = state.format === 'set' ? 75 : 70;
+    document.getElementById('capLabel').textContent = cap + (state.format==='buffet' ? '（+包廂20）' : '（套餐）');
+    var over = state.format === 'set' ? (main > cap) : (main > cap || annex > 20);
+    document.getElementById('capWarn').style.display = over ? 'block' : 'none';
+  }
+
+  // ── 版型/格式切換 ──────────────────────
+  function setToggleUI(groupId, val) {
+    document.querySelectorAll('#'+groupId+' button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.v === val);
+    });
+  }
+  document.getElementById('layoutToggle').addEventListener('click', function(e){
+    if (e.target.tagName !== 'BUTTON') return;
+    state.layout = e.target.dataset.v;
+    setToggleUI('layoutToggle', state.layout);
+    render(); scheduleSave();
+  });
+  document.getElementById('formatToggle').addEventListener('click', function(e){
+    if (e.target.tagName !== 'BUTTON') return;
+    state.format = e.target.dataset.v;
+    setToggleUI('formatToggle', state.format);
+    render(); scheduleSave();
+  });
+
+  // ── 載入既有資料 ──────────────────────
+  function loadData() {
+    if (!TOKEN) { seed(); setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); return; }
+    setStatus('saving', '載入中…');
+    fetch(BASE_URL + '?token=' + encodeURIComponent(TOKEN) + '&action=getSeatData')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var seat = data && data.seat;
+        if (seat && seat.tables && seat.tables.length) {
+          tables = seat.tables;
+          annexTables = seat.annex || [];
+          state.layout = seat.layout || 'stage';
+          state.format = seat.format || 'set';
+          seq = 0;
+          tables.concat(annexTables).forEach(function(t){ if (t.id > seq) seq = t.id; });
+        } else if (data && data.order && data.order.menuFormat) {
+          state.format = data.order.menuFormat === '自助餐' ? 'buffet' : 'set';
+          seed();
+        } else {
+          seed();
+        }
+        setToggleUI('layoutToggle', state.layout);
+        setToggleUI('formatToggle', state.format);
+        render();
+        setStatus('saved', '已載入');
+      })
+      .catch(function(e){
+        setStatus('error', '載入失敗，使用空白座位表');
+        seed();
+        setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set');
+      });
+  }
+
+  loadData();
+});
+</script>
+</body>
+</html>
