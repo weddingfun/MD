@@ -69,6 +69,8 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 .long-table-v .lv-seat { width:100%; }
 .long-table-v .lv-seat .seat { font-size:8px; padding:2px 2px; }
 .long-table-v .lv-seat .dish-select { font-size:8px; padding:1px 0; }
+.long-table-v .lv-aisle-gap { height:16px; margin:2px 0; border-top:1px dashed #B8944A; border-bottom:1px dashed #B8944A; position:relative; flex-shrink:0; }
+.long-table-v .lv-aisle-gap::after { content:'走道'; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:7px; color:#B8944A; background:#F2FAF0; padding:0 3px; white-space:nowrap; }
 
 .seat-cell { display:flex; flex-direction:column; gap:2px; }
 .seat { font-size:11px; background:#F0F0F0; border-radius:3px; padding:3px 4px; cursor:text; white-space:nowrap; overflow:hidden; line-height:1.4; border:1px solid transparent; outline:none; width:100%; box-sizing:border-box; font-family:inherit; text-align:center; }
@@ -121,6 +123,10 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
   <div class="toggle-group" id="formatToggle">
     <button data-v="set">套餐</button>
     <button data-v="buffet">自助餐</button>
+  </div>
+  <div class="toggle-group" id="aisleToggle">
+    <button data-v="no">無分隔</button>
+    <button data-v="yes">分隔（留走道）</button>
   </div>
   <button class="btn ghost" onclick="window.print()">🖨️ 列印</button>
 </div>
@@ -218,7 +224,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function doSave() {
     if (!TOKEN) return;
     setStatus('saving', '儲存中…');
-    var payload = { layout: state.layout, format: state.format, tables: tables, annex: annexTables };
+    var payload = { layout: state.layout, format: state.format, aisle: state.aisle, tables: tables, annex: annexTables };
     var seatStr = JSON.stringify(payload);
     var getUrl = BASE_URL + '?action=saveSeatData&token=' + encodeURIComponent(TOKEN) + '&seat=' + encodeURIComponent(seatStr);
     if (getUrl.length <= 2000) {
@@ -237,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ── 資料模型 ──────────────────────────────────
-  var state = { layout: 'stage', format: 'set' };
+  var state = { layout: 'stage', format: 'set', aisle: 'no' };
   var ORDER = {};
   var TABLE_LABEL_MODE = 'number'; // 'number' 或 'letter'，依確認單「桌牌」選擇決定
   var seq = 0;
@@ -420,11 +426,22 @@ document.addEventListener('DOMContentLoaded', function () {
     };
     bar.appendChild(barSpan);
     var colR = document.createElement('div'); colR.className = 'lv-col';
+    var GAP_EVERY = 3; // 分隔版：每 3 個位子後留走道空隙（若分隔後剩不到 2 人則不留，避免孤立小尾段）
     for (var i=0;i<half;i++) {
       var c = document.createElement('div'); c.className='lv-seat'; c.appendChild(makeSeatCell(t, i)); colL.appendChild(c);
+      if (state.aisle === 'yes' && (i+1) % GAP_EVERY === 0 && (half - (i+1)) >= 2) {
+        var gapL = document.createElement('div'); gapL.className = 'lv-aisle-gap';
+        colL.appendChild(gapL);
+      }
     }
+    var seatNoInCol = 0;
     for (var i=half;i<n;i++) {
+      seatNoInCol++;
       var c2 = document.createElement('div'); c2.className='lv-seat'; c2.appendChild(makeSeatCell(t, i)); colR.appendChild(c2);
+      if (state.aisle === 'yes' && seatNoInCol % GAP_EVERY === 0 && (n - (i+1)) >= 2) {
+        var gapR = document.createElement('div'); gapR.className = 'lv-aisle-gap';
+        colR.appendChild(gapR);
+      }
     }
     div.appendChild(colL);
     div.appendChild(bar);
@@ -578,6 +595,12 @@ document.addEventListener('DOMContentLoaded', function () {
     setToggleUI('formatToggle', state.format);
     render(); scheduleSave();
   });
+  document.getElementById('aisleToggle').addEventListener('click', function(e){
+    if (e.target.tagName !== 'BUTTON') return;
+    state.aisle = e.target.dataset.v;
+    setToggleUI('aisleToggle', state.aisle);
+    render(); scheduleSave();
+  });
 
   // ── 載入既有資料 ──────────────────────
   function updateOrderInfo() {
@@ -589,7 +612,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function loadData() {
-    if (!TOKEN) { updateOrderInfo(); seed(); setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); return; }
+    if (!TOKEN) { updateOrderInfo(); seed(); setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no'); return; }
     setStatus('saving', '載入中…');
     fetch(BASE_URL + '?token=' + encodeURIComponent(TOKEN) + '&action=getSeatData')
       .then(function(r){ return r.json(); })
@@ -605,6 +628,7 @@ document.addEventListener('DOMContentLoaded', function () {
           annexTables = seat.annex || [];
           state.layout = seat.layout || 'stage';
           state.format = seat.format || 'set';
+          state.aisle = seat.aisle || 'no';
           seq = 0;
           tables.concat(annexTables).forEach(function(t){ if (t.id > seq) seq = t.id; });
         } else if (data && data.order && data.order.menuFormat) {
@@ -615,13 +639,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         setToggleUI('layoutToggle', state.layout);
         setToggleUI('formatToggle', state.format);
+        setToggleUI('aisleToggle', state.aisle);
         render();
         setStatus('saved', '已載入');
       })
       .catch(function(e){
         setStatus('error', '載入失敗，使用空白座位表');
         seed();
-        setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set');
+        setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no');
       });
   }
 
