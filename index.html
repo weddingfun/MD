@@ -30,8 +30,8 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 .venue-wrap-outer { max-width:1450px; margin:0 auto; overflow-x:auto; display:flex; justify-content:center; }
 .venue-wrap { width:728px; flex-shrink:0; background:#fff; border-radius:10px; padding:14px; box-shadow:0 2px 12px rgba(0,0,0,.08); transform:scale(1.25); transform-origin:top center; margin-bottom:232px; }
 .screen-bar-abs { position:absolute; text-align:center; font-size:10px; background:#1a1a1a; color:#fff; border-radius:6px; padding:7px; letter-spacing:4px; }
-.center-zone { position:absolute; }
-.stage-panel { width:100%; height:75px; background:#E8E8E8; border:2px solid #1a1a1a; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#666; letter-spacing:2px; }
+.center-zone { position:absolute; display:flex; flex-direction:column; gap:8px; align-items:center; }
+.stage-panel { width:100%; height:75px; background:#E8E8E8; border:2px solid #1a1a1a; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#666; letter-spacing:1px; text-align:center; line-height:1.6; }
 .maintable-box { border:2px solid #B8944A; background:#FBF5E6; border-radius:8px; padding:8px 14px; display:flex; align-items:center; gap:8px; justify-content:center; }
 .maintable-box .m-label { font-size:10px; font-weight:700; color:#9a7a30; letter-spacing:2px; }
 
@@ -117,8 +117,8 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
 
 <div class="toolbar">
   <div class="toggle-group" id="layoutToggle">
-    <button data-v="stage">舞台版</button>
-    <button data-v="maintable">雙人主桌版</button>
+    <button data-v="stage" data-independent="1">舞台</button>
+    <button data-v="maintable" data-independent="1">雙人主桌</button>
   </div>
   <div class="toggle-group" id="formatToggle">
     <button data-v="set">套餐</button>
@@ -224,7 +224,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function doSave() {
     if (!TOKEN) return;
     setStatus('saving', '儲存中…');
-    var payload = { layout: state.layout, format: state.format, aisle: state.aisle, tables: tables, annex: annexTables };
+    var payload = { showStage: state.showStage, showMainTable: state.showMainTable, format: state.format, aisle: state.aisle, tables: tables, annex: annexTables };
     var seatStr = JSON.stringify(payload);
     var getUrl = BASE_URL + '?action=saveSeatData&token=' + encodeURIComponent(TOKEN) + '&seat=' + encodeURIComponent(seatStr);
     if (getUrl.length <= 2000) {
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // ── 資料模型 ──────────────────────────────────
-  var state = { layout: 'stage', format: 'set', aisle: 'no' };
+  var state = { showStage: true, showMainTable: true, format: 'set', aisle: 'no' };
   var ORDER = {};
   var TABLE_LABEL_MODE = 'number'; // 'number' 或 'letter'，依確認單「桌牌」選擇決定
   var seq = 0;
@@ -452,10 +452,12 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderCenterZone() {
     var zone = document.getElementById('centerZone');
     zone.innerHTML = '';
-    if (state.layout === 'stage') {
-      var p = document.createElement('div'); p.className='stage-panel'; p.textContent='舞台（3片併接）';
+    if (state.showStage) {
+      var p = document.createElement('div'); p.className='stage-panel';
+      p.innerHTML = '舞台（3片併接）<br>長360×寬120×高15 (cm)';
       zone.appendChild(p);
-    } else {
+    }
+    if (state.showMainTable) {
       var mt = document.createElement('div'); mt.className='maintable-box';
       var lbl = document.createElement('div'); lbl.className='m-label'; lbl.textContent='雙人主桌';
       mt.appendChild(lbl);
@@ -565,7 +567,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function updateStat() {
     var main = countFilled(tables.filter(function(t){ return !(t.key === 'table4' && state.format === 'buffet'); }));
-    if (state.layout === 'maintable' && state.mainSeats) {
+    if (state.showMainTable && state.mainSeats) {
       state.mainSeats.forEach(function(s){ if (s.name.trim()) main++; });
     }
     var annex = state.format === 'buffet' ? countFilled(annexTables) : 0;
@@ -583,10 +585,18 @@ document.addEventListener('DOMContentLoaded', function () {
       b.classList.toggle('active', b.dataset.v === val);
     });
   }
+  function setIndependentToggleUI(groupId, stateObj, keyMap) {
+    document.querySelectorAll('#'+groupId+' button').forEach(function(b){
+      var key = keyMap[b.dataset.v];
+      b.classList.toggle('active', !!stateObj[key]);
+    });
+  }
+  var LAYOUT_KEY_MAP = { stage: 'showStage', maintable: 'showMainTable' };
   document.getElementById('layoutToggle').addEventListener('click', function(e){
     if (e.target.tagName !== 'BUTTON') return;
-    state.layout = e.target.dataset.v;
-    setToggleUI('layoutToggle', state.layout);
+    var key = LAYOUT_KEY_MAP[e.target.dataset.v];
+    state[key] = !state[key];
+    setIndependentToggleUI('layoutToggle', state, LAYOUT_KEY_MAP);
     render(); scheduleSave();
   });
   document.getElementById('formatToggle').addEventListener('click', function(e){
@@ -612,7 +622,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function loadData() {
-    if (!TOKEN) { updateOrderInfo(); seed(); setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no'); return; }
+    if (!TOKEN) { updateOrderInfo(); seed(); setIndependentToggleUI('layoutToggle', state, LAYOUT_KEY_MAP); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no'); return; }
     setStatus('saving', '載入中…');
     fetch(BASE_URL + '?token=' + encodeURIComponent(TOKEN) + '&action=getSeatData')
       .then(function(r){ return r.json(); })
@@ -626,7 +636,14 @@ document.addEventListener('DOMContentLoaded', function () {
           tables = seat.tables;
           tables.forEach(function(t, i){ if (!t.key && i < 7) t.key = 'table' + (i+1); });
           annexTables = seat.annex || [];
-          state.layout = seat.layout || 'stage';
+          if (seat.showStage !== undefined || seat.showMainTable !== undefined) {
+            state.showStage = seat.showStage !== undefined ? seat.showStage : true;
+            state.showMainTable = seat.showMainTable !== undefined ? seat.showMainTable : true;
+          } else if (seat.layout) {
+            // 向下相容舊資料（曾經是互斥的單一 layout 欄位）
+            state.showStage = seat.layout === 'stage';
+            state.showMainTable = seat.layout === 'maintable';
+          }
           state.format = seat.format || 'set';
           state.aisle = seat.aisle || 'no';
           seq = 0;
@@ -637,7 +654,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
           seed();
         }
-        setToggleUI('layoutToggle', state.layout);
+        setIndependentToggleUI('layoutToggle', state, LAYOUT_KEY_MAP);
         setToggleUI('formatToggle', state.format);
         setToggleUI('aisleToggle', state.aisle);
         render();
@@ -646,7 +663,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .catch(function(e){
         setStatus('error', '載入失敗，使用空白座位表');
         seed();
-        setToggleUI('layoutToggle','stage'); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no');
+        setIndependentToggleUI('layoutToggle', state, LAYOUT_KEY_MAP); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no');
       });
   }
 
