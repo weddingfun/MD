@@ -128,16 +128,18 @@ h1 { font-size:16px; letter-spacing:2px; text-align:center; margin-bottom:2px; }
     <button data-v="no">無分隔</button>
     <button data-v="yes">分隔（留走道）</button>
   </div>
-  <button class="btn ghost" onclick="window.print()">🖨️ 列印</button>
+  <button class="btn ghost" onclick="openPrintWindow()">🖨️ 列印</button>
 </div>
 
 <div class="stat">已安排 <b id="seatedCount">0</b> / <span id="capLabel">75</span> 人（含加開包廂：<b id="annexCount">0</b>）</div>
+<div class="stat" id="kidCheck"></div>
 <div class="cap-warn" id="capWarn">⚠️ 已超過人數上限，請確認是否需調整方案</div>
 
 <div class="legend">
   <div class="leg"><span class="leg-box" style="background:#A9DB9A"></span>全素</div>
   <div class="leg"><span class="leg-box" style="background:#D4EDCC"></span>蛋奶素</div>
-  <div class="leg"><span class="leg-box" style="background:#CFE3F5"></span>兒童椅</div>
+  <div class="leg"><span class="leg-box" style="background:#CFE3F5"></span>兒童椅（右鍵標記）</div>
+  <div class="leg">兒童餐／兒童共餐（僅限兒童）：套餐從主餐選單選</div>
   <div class="leg"><span class="leg-box" style="background:#EDEDED"></span>已填寫</div>
 </div>
 <div class="save-status" id="saveStatus"></div>
@@ -216,20 +218,25 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   var saveTimer = null;
+  var LOADED = false;   // 後端資料載入成功前，一律不存檔（避免空白表蓋掉雲端資料）
   function scheduleSave() {
-    if (!GAS_MODE || !TOKEN) return;
+    if (!GAS_MODE || !TOKEN || !LOADED) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(doSave, 1200);
   }
   function doSave() {
-    if (!TOKEN) return;
+    if (!TOKEN || !LOADED) return;
     setStatus('saving', '儲存中…');
-    var payload = { showStage: state.showStage, showMainTable: state.showMainTable, format: state.format, aisle: state.aisle, tables: tables, annex: annexTables };
+    var payload = { showStage: state.showStage, showMainTable: state.showMainTable, format: state.format, aisle: state.aisle, tables: tables, annex: annexTables, mainSeats: state.mainSeats || null };
     var seatStr = JSON.stringify(payload);
     var getUrl = BASE_URL + '?action=saveSeatData&token=' + encodeURIComponent(TOKEN) + '&seat=' + encodeURIComponent(seatStr);
     if (getUrl.length <= 2000) {
       fetch(getUrl)
-        .then(function(){ setStatus('saved', '✓ 已儲存 ' + timeStr()); })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+          if (res && res.success === false) setStatus('error', '⚠️ 未儲存：' + (res.error || '後端拒絕') + '，請重新整理頁面');
+          else setStatus('saved', '✓ 已儲存 ' + timeStr());
+        })
         .catch(function(e){ setStatus('error', '儲存失敗：' + e.message); });
     } else {
       fetch(BASE_URL, {
@@ -245,6 +252,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── 資料模型 ──────────────────────────────────
   var state = { showStage: true, showMainTable: true, format: 'set', aisle: 'no' };
   var ORDER = {};
+  var FORM = {};
   var TABLE_LABEL_MODE = 'number'; // 'number' 或 'letter'，依確認單「桌牌」選擇決定
   var seq = 0;
   var tables = [];       // 主場地固定桌
@@ -329,7 +337,8 @@ document.addEventListener('DOMContentLoaded', function () {
       sel.className = 'dish-select';
       var nameA = (ORDER.mainDishA_short && ORDER.mainDishA_short.trim()) || '主餐A';
       var nameB = (ORDER.mainDishB_short && ORDER.mainDishB_short.trim()) || '主餐B';
-      sel.innerHTML = '<option value="">主餐</option><option value="A">' + nameA + '</option><option value="B">' + nameB + '</option>';
+      sel.innerHTML = '<option value="">主餐</option><option value="A">' + nameA + '</option><option value="B">' + nameB + '</option>' +
+        '<option value="kidmeal">兒童餐</option><option value="share">兒童共餐（僅限兒童，不佔餐）</option>';
       sel.value = s.dish || '';
       var printText = document.createElement('div');
       printText.className = 'dish-print-text';
@@ -337,7 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
         printText.textContent = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
       }
       syncPrintText();
-      sel.onchange = function(){ s.dish = sel.value; syncPrintText(); scheduleSave(); };
+      sel.onchange = function(){ s.dish = sel.value; syncPrintText(); updateStat(); scheduleSave(); };
       wrap.appendChild(sel);
       wrap.appendChild(printText);
     }
@@ -574,9 +583,49 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('seatedCount').textContent = main;
     document.getElementById('annexCount').textContent = annex;
     var cap = state.format === 'set' ? 75 : 70;
+    if (state.format === 'set') main -= countShare();
+    renderKidCheck();
     document.getElementById('capLabel').textContent = cap + (state.format==='buffet' ? '（+包廂20）' : '（套餐）');
     var over = state.format === 'set' ? (main > cap) : (main > cap || annex > 20);
     document.getElementById('capWarn').style.display = over ? 'block' : 'none';
+  }
+
+  function allSeatsInUse() {
+    var list = [];
+    tables.forEach(function(t){
+      if (t.key === 'table4' && state.format === 'buffet') return;
+      var n = (t.key === 'table7' && state.format === 'buffet') ? 18 : t.seats.length;
+      t.seats.slice(0, n).forEach(function(s){ list.push(s); });
+    });
+    if (state.showMainTable && state.mainSeats) state.mainSeats.forEach(function(s){ list.push(s); });
+    if (state.format === 'buffet') annexTables.forEach(function(t){ t.seats.forEach(function(s){ list.push(s); }); });
+    return list.filter(function(s){ return s.name && s.name.trim(); });
+  }
+  function countShare() {
+    return allSeatsInUse().filter(function(s){ return s.dish === 'share'; }).length;
+  }
+  function renderKidCheck() {
+    var el = document.getElementById('kidCheck'); if (!el) return;
+    var seats = allSeatsInUse();
+    var kidMeal = 0, chair = 0, share = 0, noDish = 0;
+    seats.forEach(function(s){
+      if (s.dish === 'kidmeal') kidMeal++;
+      if (s.dish === 'share') share++;
+      if (s.kid) chair++;
+      if (state.format === 'set' && !s.dish && !s.vegType) noDish++;
+    });
+    function cmp(label, n, formVal) {
+      var f = parseInt(formVal, 10);
+      if (isNaN(f)) return label + ' <b>' + n + '</b>';
+      var bad = f !== n;
+      return '<span style="color:' + (bad ? '#c0392b' : '#2d8a3e') + '">' + label + ' <b>' + n + '</b>（確認單 ' + f + '）' + (bad ? ' ⚠️' : ' ✓') + '</span>';
+    }
+    var parts = [];
+    if (state.format === 'set') parts.push(cmp('兒童餐', kidMeal, FORM.paxKidMeal));
+    parts.push(cmp('兒童椅', chair, FORM.kidsChair));
+    if (share) parts.push('兒童共餐 <b>' + share + '</b>');
+    if (noDish) parts.push('<span style="color:#c8860a">未選主餐 <b>' + noDish + '</b></span>');
+    el.innerHTML = parts.join('　');
   }
 
   // ── 版型/格式切換 ──────────────────────
@@ -624,18 +673,28 @@ document.addEventListener('DOMContentLoaded', function () {
   function loadData() {
     if (!TOKEN) { updateOrderInfo(); seed(); setIndependentToggleUI('layoutToggle', state, LAYOUT_KEY_MAP); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no'); return; }
     setStatus('saving', '載入中…');
+    var lockEl = document.createElement('div');
+    lockEl.id = 'loadLock';
+    lockEl.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,.75);z-index:300;display:flex;align-items:center;justify-content:center;font-size:15px;color:#555;';
+    lockEl.textContent = '座位表載入中，請稍候…';
+    document.body.appendChild(lockEl);
+
     fetch(BASE_URL + '?token=' + encodeURIComponent(TOKEN) + '&action=getSeatData')
       .then(function(r){ return r.json(); })
       .then(function(data){
         ORDER = (data && data.order) || {};
-        var formData = (data && data.form) || {};
-        TABLE_LABEL_MODE = (formData.tableCard === '字母(A-J)') ? 'letter' : 'number';
+        FORM = (data && data.form) || {};
+        TABLE_LABEL_MODE = (FORM.tableCard === '字母(A-J)') ? 'letter' : 'number';
         updateOrderInfo();
+        if (ORDER.groomName) {
+          document.title = (ORDER.weddingDate || '') + ' ' + ORDER.groomName + '&' + ORDER.brideName + '｜明達館座位表';
+        }
         var seat = data && data.seat;
         if (seat && seat.tables && seat.tables.length) {
           tables = seat.tables;
           tables.forEach(function(t, i){ if (!t.key && i < 7) t.key = 'table' + (i+1); });
           annexTables = seat.annex || [];
+          if (seat.mainSeats && seat.mainSeats.length) state.mainSeats = seat.mainSeats;
           if (seat.showStage !== undefined || seat.showMainTable !== undefined) {
             state.showStage = seat.showStage !== undefined ? seat.showStage : true;
             state.showMainTable = seat.showMainTable !== undefined ? seat.showMainTable : true;
@@ -659,13 +718,216 @@ document.addEventListener('DOMContentLoaded', function () {
         setToggleUI('aisleToggle', state.aisle);
         render();
         setStatus('saved', '已載入');
+        LOADED = true;
+        lockEl.remove();
       })
-      .catch(function(e){
-        setStatus('error', '載入失敗，使用空白座位表');
-        seed();
-        setIndependentToggleUI('layoutToggle', state, LAYOUT_KEY_MAP); setToggleUI('formatToggle','set'); setToggleUI('aisleToggle','no');
+      .catch(function(){
+        setStatus('error', '載入失敗，請重新整理頁面（目前的修改不會被儲存）');
+        lockEl.textContent = '⚠️ 載入失敗，請重新整理頁面';
+        lockEl.style.color = '#c0392b';
       });
   }
+
+  // ── 列印：A4 橫式專用版面（獨立視窗，不受畫面版樣式干擾）──
+  var MD_COLOR = { '全素':'#1E6B2B', '蛋奶素':'#2E7D32', '兒童餐':'#1F5AA6', '兒童共餐':'#6B6B6B', '未選':'#999999' };
+  var MAIN_COLORS = ['#C0392B', '#2874A6'];
+  function escH(v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; });
+  }
+  function dishNames() {
+    return {
+      A: (ORDER.mainDishA_short && ORDER.mainDishA_short.trim()) || '主餐A',
+      B: (ORDER.mainDishB_short && ORDER.mainDishB_short.trim()) || '主餐B'
+    };
+  }
+  function seatMeal(s) {
+    var dn = dishNames();
+    if (s.vegType) return { tag: s.vegType, cat: s.vegType, color: MD_COLOR[s.vegType] };
+    if (state.format !== 'set') return { tag: '', cat: '一般', color: '#555' };
+    if (s.dish === 'A') return { tag: dn.A, cat: 'A', color: MAIN_COLORS[0] };
+    if (s.dish === 'B') return { tag: dn.B, cat: 'B', color: MAIN_COLORS[1] };
+    if (s.dish === 'kidmeal') return { tag: '兒童餐', cat: '兒童餐', color: MD_COLOR['兒童餐'] };
+    if (s.dish === 'share') return { tag: '兒童共餐', cat: '兒童共餐', color: MD_COLOR['兒童共餐'] };
+    if (state.format === 'set') return { tag: '未選主餐', cat: '未選', color: MD_COLOR['未選'] };
+    return { tag: '', cat: '一般', color: '#555' };
+  }
+  function seatBg(s) { return s.vegType === '全素' ? ' vegp' : s.vegType ? ' veg' : s.kid ? ' kid' : ''; }
+  function cellH(s) {
+    if (!s) return '<div></div>';
+    if (!s.name || !s.name.trim()) return '<div class="c ch empty"></div>';
+    var m = seatMeal(s);
+    return '<div class="c ch' + seatBg(s) + '"><span class="n">' + escH(s.name) + (s.kid && s.vegType ? '<i class="kc">椅</i>' : '') + '</span>' +
+      (m.tag ? '<span class="d" style="color:' + m.color + '">' + escH(m.tag) + '</span>' : '') + '</div>';
+  }
+  function seatsOf(t) {
+    var n = (t.key === 'table7' && state.format === 'buffet') ? 18 : t.seats.length;
+    return t.seats.slice(0, n);
+  }
+  function filledN(seats) { return seats.filter(function(s){ return s.name && s.name.trim(); }).length; }
+  function roundCard(t) {
+    var seats = seatsOf(t);
+    var rows = '';
+    for (var i = 0; i < seats.length; i += 2) rows += cellH(seats[i]) + cellH(seats[i + 1]);
+    return '<div class="card round"><div class="hd"><b>' + escH(computeDisplayLabel(t)) + '</b><span>' + filledN(seats) + '／' + seats.length + '人</span></div><div class="g2">' + rows + '</div></div>';
+  }
+  function longCard(t) {
+    var seats = seatsOf(t);
+    var half = seats.length / 2;
+    function col(arr) {
+      var out = '';
+      arr.forEach(function(s, i){
+        out += cellH(s);
+        if (state.aisle === 'yes' && (i + 1) % 3 === 0 && (arr.length - (i + 1)) >= 2) out += '<div class="aisle">走道</div>';
+      });
+      return out;
+    }
+    return '<div class="card long"><div class="hd"><b>' + escH(computeDisplayLabel(t)) + '</b><span>' + filledN(seats) + '／' + seats.length + '人</span></div>' +
+      '<table class="lt"><tr><td class="lc">' + col(seats.slice(0, half)) + '</td><td class="lbar">' + escH(computeDisplayLabel(t)) + '</td><td class="lc">' + col(seats.slice(half)) + '</td></tr></table></div>';
+  }
+
+  function buildPrintDoc(autoPrint) {
+    var g = ORDER.groomName, b = ORDER.brideName, d = ORDER.weddingDate, s = ORDER.mealSession;
+    var docTitle = (d || '') + ' ' + (g || '') + '&' + (b || '') + '｜明達館座位表';
+    var isSet = state.format === 'set';
+    var dn = dishNames();
+
+    // ── 統計 ──
+    var cats = isSet ? [['A', dn.A, MAIN_COLORS[0]], ['B', dn.B, MAIN_COLORS[1]], ['全素', '全素', MD_COLOR['全素']], ['蛋奶素', '蛋奶素', MD_COLOR['蛋奶素']], ['兒童餐', '兒童餐', MD_COLOR['兒童餐']], ['兒童共餐', '兒童共餐', MD_COLOR['兒童共餐']], ['未選', '未選', '#888']]
+                     : [['一般', '一般', '#555'], ['全素', '全素', MD_COLOR['全素']], ['蛋奶素', '蛋奶素', MD_COLOR['蛋奶素']]];
+    var groups = [];
+    tables.forEach(function(t){ if (!(t.key === 'table4' && state.format === 'buffet')) groups.push({ label: computeDisplayLabel(t), seats: seatsOf(t) }); });
+    if (state.showMainTable && state.mainSeats) groups.unshift({ label: '雙人主桌', seats: state.mainSeats });
+    if (!isSet) annexTables.forEach(function(t){ groups.push({ label: t.label, seats: t.seats, annex: true }); });
+    var total = { n: 0 }, chairs = 0, annexN = 0;
+    var rowsData = groups.map(function(gp){
+      var r = { label: gp.label, n: 0 };
+      gp.seats.forEach(function(st){
+        if (!st.name || !st.name.trim()) return;
+        var c = seatMeal(st).cat;
+        r.n++; r[c] = (r[c] || 0) + 1; total.n++; total[c] = (total[c] || 0) + 1;
+        if (st.kid) chairs++;
+        if (gp.annex) annexN++;
+      });
+      return r;
+    }).filter(function(r){ return r.n; });
+    cats = cats.filter(function(c){ return total[c[0]] || ['A','B','一般'].indexOf(c[0]) >= 0; });
+
+    var mealN = total.n - (total['兒童共餐'] || 0);
+    var cap = isSet ? 75 : 70;
+    var mainHall = isSet ? mealN : total.n - annexN;
+    var over = mainHall > cap || annexN > 20;
+    var capText = isSet ? ('套餐 ' + mealN + '／上限 75 份') : ('主場 ' + mainHall + '／70・包廂 ' + annexN + '／20');
+    var summary = cats.filter(function(c){ return total[c[0]]; }).map(function(c){ return c[1] + ' ' + total[c[0]]; }).join('・');
+
+    var th = '<tr><th class="l">餐點統計</th><th>人數</th>' + cats.map(function(c){ return '<th style="background:' + c[2] + '">' + escH(c[1]) + '</th>'; }).join('') + '</tr>';
+    var trs = rowsData.map(function(r){
+      return '<tr><td class="l">' + escH(r.label) + '</td><td>' + r.n + '</td>' + cats.map(function(c){ return '<td>' + (r[c[0]] || '–') + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    trs += '<tr class="tot"><td class="l">合計</td><td>' + total.n + '</td>' + cats.map(function(c){ return '<td>' + (total[c[0]] || '–') + '</td>'; }).join('') + '</tr>';
+
+    // ── 第1頁：實際場圖（複製畫面上的場圖，輸入框換成文字＋餐點標籤）──
+    var live = document.getElementById('floorPlan');
+    var clone = live.cloneNode(true);
+    clone.removeAttribute('id');
+    var liveInputs = live.querySelectorAll('input.seat');
+    clone.querySelectorAll('input.seat').forEach(function(inp, i){
+      var li = liveInputs[i];
+      var div = document.createElement('div');
+      div.className = li.className + ' pseat';
+      div.textContent = li.value.trim();
+      inp.parentNode.replaceChild(div, inp);
+    });
+    var liveSels = live.querySelectorAll('select.dish-select');
+    clone.querySelectorAll('select.dish-select').forEach(function(sel, i){
+      var ls = liveSels[i];
+      var cell = ls.closest('.seat-cell');
+      var nameInp = cell ? cell.querySelector('input.seat') : null;
+      var filled = nameInp && nameInp.value.trim();
+      var veg = nameInp && /veg-pure/.test(nameInp.className) ? '全素' : (nameInp && /veg-ovo/.test(nameInp.className) ? '蛋奶素' : '');
+      var m = seatMeal({ name: filled ? 'x' : '', dish: ls.value, vegType: veg, kid: false });
+      var tag = document.createElement('div');
+      tag.className = 'pdish';
+      if (filled && m.tag) { tag.textContent = m.tag; tag.style.color = m.color; }
+      sel.parentNode.replaceChild(tag, sel);
+    });
+    clone.querySelectorAll('.dish-print-text').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('[onclick]').forEach(function(el){ el.removeAttribute('onclick'); });
+    // 套餐時素食座位在畫面上沒有主餐選單，補上素食標籤
+    if (!isSet) {
+      clone.querySelectorAll('.pseat.veg-pure, .pseat.veg-ovo').forEach(function(el){
+        if (!el.textContent) return;
+        var t = document.createElement('div'); t.className = 'pdish';
+        t.textContent = /veg-pure/.test(el.className) ? '全素' : '蛋奶素';
+        t.style.color = MD_COLOR[t.textContent];
+        el.parentNode.appendChild(t);
+      });
+    }
+    var planH = live.offsetHeight;
+
+    var annexHtml = (!isSet && annexTables.length)
+      ? '<div class="sec">海洋包廂加開（最多 20 人）</div><div class="annex-g">' + annexTables.map(roundCard).join('') + '</div>' : '';
+
+    var baseCss = document.querySelector('style').textContent;
+    var css = baseCss +
+      '@page{size:A4 portrait;margin:6mm}' +
+      'html,body{background:#fff !important;padding:0 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+      'body{font-family:-apple-system,"PingFang TC","Noto Sans TC","Helvetica Neue",sans-serif;color:#222}' +
+      '.page{width:198mm;overflow:hidden}.page + .page{break-before:page;page-break-before:always}' +
+      '.head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:.6mm solid #9D380E;padding-bottom:1.5mm;margin-bottom:2mm}' +
+      '.ttl{font-size:14pt;font-weight:800;color:#9D380E;line-height:1.25}.ttl .cp{display:block;color:#222;font-size:13pt}.ttl .br{font-size:8pt;font-weight:600;color:#6BA1C7;margin-left:2mm}' +
+      '.meta{font-size:7.5pt;color:#555;text-align:right;line-height:1.55}.meta b{font-size:12pt;color:#9D380E}.meta .over{color:#c0392b;font-weight:700}' +
+      '.legend2{font-size:7pt;color:#555;display:flex;flex-wrap:wrap;gap:1mm 3mm;margin-bottom:1.5mm;justify-content:center}' +
+      '.sw{display:inline-block;width:3mm;height:3mm;border-radius:.6mm;vertical-align:-.5mm;margin-right:.6mm;border:.2mm solid #999}' +
+      '.planbox{display:flex;justify-content:center}' +
+      '.planbox .floor-plan{margin:0;flex-shrink:0}' +
+      '.pseat{font-size:9px !important;font-weight:700;min-height:15px;padding:2px 1px !important;border:1px solid #ddd !important;white-space:nowrap;overflow:hidden;text-overflow:clip}' +
+      '.pseat.empty-s{background:#fafafa !important;border-style:dashed !important}' +
+      '.pdish{font-size:8px;font-weight:700;text-align:center;line-height:1.3;min-height:10px}' +
+      '.arrow-note{white-space:nowrap;width:auto !important;margin-left:-6px}' +
+      '.sec{font-size:10pt;font-weight:700;color:#9D380E;border-left:1.2mm solid #9D380E;background:#F8EFEA;padding:1mm 2.5mm;margin:3mm 0 2mm}' +
+      'table.st{width:100%;border-collapse:collapse;font-size:8.5pt}' +
+      'table.st th{background:#9D380E;color:#fff;padding:1mm;font-weight:700}table.st th.l{background:#3a5f8a;text-align:left}' +
+      'table.st td{border-bottom:.2mm solid #e5e0d8;padding:.9mm 1mm;text-align:center}table.st td.l{text-align:left}' +
+      'table.st tr.tot td{background:#F6E6DE;font-weight:700;color:#9D380E}' +
+      '.annex-g{display:grid;grid-template-columns:repeat(2,1fr);gap:2mm}' +
+      '.card{border:.3mm solid #D4A017;border-radius:2mm;padding:1.2mm 1.5mm;background:#FFFBEF}' +
+      '.card .hd{display:flex;justify-content:space-between;font-size:8.5pt;color:#8a5e00;margin-bottom:.8mm}.card .hd span{color:#888;font-size:7.5pt}' +
+      '.g2{display:grid;grid-template-columns:1fr 1fr;gap:.8mm 1.2mm}' +
+      '.c{border:.25mm solid #D5CFC6;border-radius:1mm;background:#fff}' +
+      '.ch{min-height:6mm;display:flex;justify-content:space-between;align-items:center;padding:.3mm 1.2mm;gap:1mm}' +
+      '.ch .n{font-size:8pt;font-weight:700}.ch .d{font-size:7pt;font-weight:700}.kc{font-style:normal;font-size:6pt;color:#1F5AA6;margin-left:.6mm}' +
+      '.c.vegp{background:#C9E8BE}.c.veg{background:#DDF0D6}.c.kid{background:#DCE9F8}.c.empty{border-style:dashed;background:#FAFAFA}';
+
+    var headHtml = '<div class="head"><div class="ttl">' + escH((d || '') + (s ? ' ' + s : '')) + '　MD創作料理 台大明達館 座位表' +
+        '<span class="br">wedding fun 想樂</span><span class="cp">' + escH((g || '') + ' & ' + (b || '')) + '</span></div>' +
+        '<div class="meta">賓客 <b>' + total.n + '</b> 人｜' + escH(summary) + '<br>兒童椅 ' + chairs + ' 張｜' +
+        '<span class="' + (over ? 'over' : '') + '">' + (over ? '⚠️ ' : '') + capText + '</span><br>' + (isSet ? '套餐' : '自助餐') + (state.aisle === 'yes' ? '・長桌分隔留走道' : '') + '</div></div>';
+    var legendHtml = '<div class="legend2">' +
+      cats.filter(function(c){ return c[0] !== '未選' && c[0] !== '一般'; }).map(function(c){ return '<span style="color:' + c[2] + ';font-weight:700">■' + escH(c[1]) + '</span>'; }).join('') +
+      '<span><i class="sw" style="background:#A9DB9A"></i>全素</span><span><i class="sw" style="background:#D4EDCC"></i>蛋奶素</span><span><i class="sw" style="background:#CFE3F5"></i>坐兒童椅</span>' +
+      (isSet ? '<span>兒童共餐＝僅限兒童，不計入套餐份數</span>' : '') + '</div>';
+
+    var body = '<div class="page" id="p1">' + headHtml + legendHtml + '<div class="planbox" id="planbox">' + clone.outerHTML + '</div></div>' +
+      '<div class="page" id="p2">' + headHtml + '<div class="sec">餐點統計</div><table class="st">' + th + trs + '</table>' + annexHtml + '</div>';
+    var fit = '<script>window.addEventListener("load",function(){' +
+      'var px=96/25.4,p1=document.getElementById("p1"),pb=document.getElementById("planbox"),fp=pb.querySelector(".floor-plan");' +
+      'var availH=283*px-(p1.scrollHeight-pb.scrollHeight),availW=198*px;' +
+      'var sc=Math.min(1.15,availW/fp.offsetWidth,availH/fp.offsetHeight);fp.style.zoom=sc;' +
+      (autoPrint ? 'setTimeout(function(){window.focus();window.print();},300);' : '') +
+      '});<' + '/script>';
+
+    return '<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>' + escH(docTitle) + '</title><style>' + css + '</style></head><body>' + body + fit + '</body></html>';
+  }
+  window.buildPrintDoc = buildPrintDoc;
+
+  function openPrintWindow() {
+    var win = window.open('', '_blank');
+    if (!win) { alert('瀏覽器阻擋了列印視窗彈出，請允許本頁的彈出視窗後再試一次。'); return; }
+    win.document.open();
+    win.document.write(buildPrintDoc(true));
+    win.document.close();
+  }
+  window.openPrintWindow = openPrintWindow;
 
   loadData();
 });
