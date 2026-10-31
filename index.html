@@ -419,9 +419,8 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function makeLongTableVertical(t) {
-    var n = t.seats.length; // 16 or 20
-    if (t.key === 'table7' && state.format === 'buffet') n = 18; // 自助餐格式：備餐台前2位不開放
-    var half = n/2;
+    var half = t.seats.length/2; // 左右欄固定各半（16→8/8、20→10/10），自助餐少開的位子不影響左欄，避免右欄座位錯位
+    var n = seatsOf(t).length;   // 自助餐格式：table7 備餐台前2位（右欄最後2位）不開放
     var div = document.createElement('div');
     div.className = 'long-table-v';
     var colL = document.createElement('div'); colL.className = 'lv-col';
@@ -570,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function countFilled(list) {
     var c = 0;
-    list.forEach(function(t){ t.seats.forEach(function(s){ if (s.name.trim()) c++; }); });
+    list.forEach(function(t){ seatsOf(t).forEach(function(s){ if (s.name.trim()) c++; }); });
     return c;
   }
 
@@ -594,8 +593,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var list = [];
     tables.forEach(function(t){
       if (t.key === 'table4' && state.format === 'buffet') return;
-      var n = (t.key === 'table7' && state.format === 'buffet') ? 18 : t.seats.length;
-      t.seats.slice(0, n).forEach(function(s){ list.push(s); });
+      seatsOf(t).forEach(function(s){ list.push(s); });
     });
     if (state.showMainTable && state.mainSeats) state.mainSeats.forEach(function(s){ list.push(s); });
     if (state.format === 'buffet') annexTables.forEach(function(t){ t.seats.forEach(function(s){ list.push(s); }); });
@@ -772,7 +770,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   function longCard(t) {
     var seats = seatsOf(t);
-    var half = seats.length / 2;
+    var half = t.seats.length / 2; // 與畫面一致：左欄固定前半，右欄接續
     function col(arr) {
       var out = '';
       arr.forEach(function(s, i){
