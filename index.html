@@ -443,10 +443,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
     var seatNoInCol = 0;
-    for (var i=half;i<n;i++) {
+    for (var i=half;i<t.seats.length;i++) {
       seatNoInCol++;
-      var c2 = document.createElement('div'); c2.className='lv-seat'; c2.appendChild(makeSeatCell(t, i)); colR.appendChild(c2);
-      if (state.aisle === 'yes' && seatNoInCol % GAP_EVERY === 0 && (n - (i+1)) >= 2) {
+      var c2 = document.createElement('div'); c2.className='lv-seat';
+      if (i < n) c2.appendChild(makeSeatCell(t, i));
+      else { var ph = makeSeatCell(t, i); ph.style.visibility = 'hidden'; ph.style.pointerEvents = 'none'; c2.appendChild(ph); } // 不開放的位子留空，維持左右對坐
+      colR.appendChild(c2);
+      if (state.aisle === 'yes' && seatNoInCol % GAP_EVERY === 0 && (t.seats.length - (i+1)) >= 2) {
         var gapR = document.createElement('div'); gapR.className = 'lv-aisle-gap';
         colR.appendChild(gapR);
       }
@@ -780,7 +783,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return out;
     }
     return '<div class="card long"><div class="hd"><b>' + escH(computeDisplayLabel(t)) + '</b><span>' + filledN(seats) + '／' + seats.length + '人</span></div>' +
-      '<table class="lt"><tr><td class="lc">' + col(seats.slice(0, half)) + '</td><td class="lbar">' + escH(computeDisplayLabel(t)) + '</td><td class="lc">' + col(seats.slice(half)) + '</td></tr></table></div>';
+      '<table class="lt"><tr><td class="lc">' + col(seats.slice(0, half)) + '</td><td class="lbar">' + escH(computeDisplayLabel(t)) + '</td><td class="lc">' + col(seats.slice(half).concat(new Array(Math.max(0, half - (seats.length - half))).fill(null))) + '</td></tr></table></div>';
   }
 
   function buildPrintDoc(autoPrint) {
